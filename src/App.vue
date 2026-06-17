@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { parseImportedRows } from './scheduleParser.js'
+import ScheduleGrid from './components/ScheduleGrid.vue'
 
 const SAMPLE_CSV = `姓名,星期,開始,結束,課程,教室
 林芷晴,一,09:00,11:00,資料結構,A301
@@ -25,6 +26,17 @@ const lastSyncText = ref('未同步')
 const searchText = ref('')
 const selectedName = ref('全部')
 const uploadName = ref('')
+const selectedPeople = ref([])
+const matchRooms = ref([])
+const currentPage = ref('control')
+
+function createMatchRoom() {
+  const id = `room-${Date.now()}`
+  const room = { id, name: `媒合空間 ${matchRooms.value.length + 1}`, members: [...selectedPeople.value] }
+  matchRooms.value.push(room)
+  selectedPeople.value = []
+  return room
+}
 
 function splitCSVLine(line) {
   const result = []
@@ -324,6 +336,12 @@ const filteredRows = computed(() => {
   })
 })
 
+function toggleSelectPerson(name) {
+  const idx = selectedPeople.value.indexOf(name)
+  if (idx === -1) selectedPeople.value.push(name)
+  else selectedPeople.value.splice(idx, 1)
+}
+
 const peopleMap = computed(() => flattenRowsByName(rows.value))
 
 const totalClasses = computed(() => rows.value.length)
@@ -440,8 +458,43 @@ async function handleFileChange(event) {
     return
   }
 
-  refreshRows(parsed, `上傳檔案：${file.name}`)
-  statusText.value = '已讀入 CSV'
+  // If currently using built-in sample, remove it when user uploads their CSV
+  if (activeSource.value === '內建示範課表' && rows.value.length) {
+    rows.value = []
+  }
+
+  // Determine name conflicts between incoming rows and existing rows
+  const existingNames = new Set(rows.value.map((r) => r.name))
+  const incomingNames = [...new Set(parsed.map((r) => r.name))]
+  const conflicts = incomingNames.filter((n) => existingNames.has(n))
+
+  let toAppend = parsed.slice()
+
+  if (conflicts.length) {
+    const list = conflicts.slice(0, 20).join(', ')
+    const more = conflicts.length > 20 ? `，等 ${conflicts.length - 20} 人` : ''
+    const ok = window.confirm(`發現已存在學生：${list}${more}。按「確定」將覆蓋這些學生的舊資料；按「取消」則僅加入新學生的資料。`)
+
+    if (ok) {
+      const conflictSet = new Set(conflicts)
+      rows.value = rows.value.filter((r) => !conflictSet.has(r.name))
+    } else {
+      const conflictSet = new Set(conflicts)
+      toAppend = toAppend.filter((r) => !conflictSet.has(r.name))
+    }
+  }
+
+  // Append the (possibly filtered) incoming rows
+  for (const r of toAppend) rows.value.push(r)
+
+  activeSource.value = `上傳檔案：${file.name}`
+  statusText.value = `已讀入 ${toAppend.length} 筆 (衝突: ${conflicts.length})`
+
+  // adjust selection if necessary
+  const names = availableNames.value
+  if (!names.includes(selectedName.value)) {
+    selectedName.value = names[0] || '全部'
+  }
 }
 
 async function syncToBackend() {
@@ -482,7 +535,13 @@ onMounted(loadFromBackend)
     <div class="ambient ambient-two"></div>
 
     <main class="layout">
-      <section class="hero card">
+      <nav style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
+        <button @click.prevent="currentPage = 'control'" :class="['primary-button', currentPage === 'control' ? 'active' : '']">控制中心</button>
+        <button @click.prevent="currentPage = 'demo'" :class="['secondary-button', currentPage === 'demo' ? 'active' : '']">示範課表</button>
+        <div style="margin-left:auto;color:#b6c2db">目前頁面：{{ currentPage === 'control' ? '控制中心' : '示範課表' }}</div>
+      </nav>
+
+      <section v-if="currentPage === 'control'" class="hero card">
         <div class="hero-copy">
           <span class="eyebrow">空堂媒合系統</span>
           <h1>用 CSV 課表，自動找出可一起約課的空堂。</h1>
@@ -526,6 +585,19 @@ onMounted(loadFromBackend)
             </div>
           </div>
 
+          <div style="margin-top:10px;">
+            <label style="display:block;margin-bottom:6px;color:#9eb0d1">選取多名顯示課表</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button v-for="name in availableNames" :key="name" @click.prevent="toggleSelectPerson(name)" :class="['primary-button', selectedPeople.includes(name) ? 'selected' : '']" style="padding:6px 10px;min-height:34px;background:transparent;border:1px solid rgba(148,163,184,0.12);color:#cfe6ff">
+                {{ name }}
+              </button>
+            </div>
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button class="secondary-button" @click.prevent="createMatchRoom">建立媒合空間</button>
+              <span class="status-pill muted">已選 {{ selectedPeople.length }} 人</span>
+            </div>
+          </div>
+
           <div class="metric-grid">
             <article class="metric-card">
               <span>課堂筆數</span>
@@ -543,7 +615,7 @@ onMounted(loadFromBackend)
         </div>
       </section>
 
-      <section class="content-grid">
+      <section v-if="currentPage === 'control'" class="content-grid">
         <article class="card table-card">
           <div class="section-heading">
             <div>
@@ -586,7 +658,21 @@ onMounted(loadFromBackend)
             <div class="section-heading compact">
               <div>
                 <span class="eyebrow">個人空堂</span>
-                <h2>{{ selectedSummary.name }}</h2>
+            <aside class="side-column">
+              <article class="card note-card">
+                <span class="eyebrow">媒合空間</span>
+                <p>已建立的媒合空間清單：</p>
+                <ul>
+                  <li v-for="room in matchRooms" :key="room.id">{{ room.name }} — 成員：{{ room.members.join(', ') }}</li>
+                </ul>
+              </article>
+
+              <article class="card note-card">
+                <span class="eyebrow">課表示範圖</span>
+                <ScheduleGrid :people="selectedPeople" :rows="rows" />
+              </article>
+
+            </aside>
               </div>
               <span class="subtle">{{ selectedSummary.classCount }} 堂課</span>
             </div>
@@ -642,6 +728,17 @@ onMounted(loadFromBackend)
             <p>請使用 CSV 欄位：姓名、星期、開始、結束、課程、教室。星期可填一到日，也可使用 Monday 等英文格式。</p>
           </article>
         </aside>
+      </section>
+
+      <section v-else class="card" style="padding:20px;border-radius:18px;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <button class="ghost-button" @click.prevent="currentPage = 'control'">← 返回控制中心</button>
+          <h2 style="margin:0;color:#e8eefc">示範課表（放大檢視）</h2>
+        </div>
+
+        <div>
+          <ScheduleGrid :people="availableNames" :rows="rows" :slotStart="5*60" :slotEnd="22*60" :slotStep="20" />
+        </div>
       </section>
     </main>
   </div>
