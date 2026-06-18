@@ -666,12 +666,6 @@ onMounted(loadFromBackend)
                   <li v-for="room in matchRooms" :key="room.id">{{ room.name }} — 成員：{{ room.members.join(', ') }}</li>
                 </ul>
               </article>
-
-              <article class="card note-card">
-                <span class="eyebrow">課表示範圖</span>
-                <ScheduleGrid :people="selectedPeople" :rows="rows" />
-              </article>
-
             </aside>
               </div>
               <span class="subtle">{{ selectedSummary.classCount }} 堂課</span>

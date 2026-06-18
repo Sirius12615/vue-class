@@ -7,24 +7,31 @@
       </div>
     </div>
 
-    <div class="grid">
-      <div class="time-col">
-        <div v-for="slot in slots" :key="slot.start" class="time-cell">{{ minutesToLabel(slot.start) }}</div>
+    <div class="grid-wrapper">
+      <div class="header-row">
+        <div class="time-header"></div>
+        <div class="days-headers">
+          <div v-for="day of days" :key="day" class="day-header">{{ dayLabel(day) }}</div>
+        </div>
       </div>
 
-      <div class="days-col">
-        <div class="day-header" v-for="day of days" :key="day">{{ dayLabel(day) }}</div>
+      <div class="grid">
+        <div class="time-col">
+          <div v-for="slot in slots" :key="slot.start" class="time-cell">{{ minutesToLabel(slot.start) }}</div>
+        </div>
 
-        <div class="day-columns">
-          <div v-for="day of days" :key="day" class="day-column">
-            <div v-for="slot in slots" :key="slot.start" class="grid-cell"></div>
+        <div class="days-col">
+          <div class="day-columns">
+            <div v-for="day of days" :key="day" class="day-column">
+              <div v-for="slot in slots" :key="slot.start" class="grid-cell"></div>
 
-            <div class="blocks">
-              <div v-for="block in blocksForDay(day)" :key="`${block.name}-${block.start}`"
-                class="person-block"
-                :title="`${block.name} ${minutesToLabel(block.start)}-${minutesToLabel(block.end)}\n${block.course || ''}`"
-                :style="blockStyle(block)">
-                <div class="block-label">{{ block.name }} {{ minutesToLabel(block.start) }}-{{ minutesToLabel(block.end) }}</div>
+              <div class="blocks">
+                <div v-for="block in blocksForDay(day)" :key="`${block.name}-${block.start}`"
+                  class="person-block"
+                  :title="`${block.name} ${minutesToLabel(block.start)}-${minutesToLabel(block.end)}\n${block.course || ''}`"
+                  :style="blockStyle(block)">
+                  <div class="block-label">{{ block.name }} {{ minutesToLabel(block.start) }}-{{ minutesToLabel(block.end) }}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -110,15 +117,96 @@ function blockStyle(block){
 .legend { display:flex; gap:12px; margin-bottom:8px; flex-wrap:wrap }
 .legend-item { display:flex; gap:8px; align-items:center }
 .swatch { width:14px; height:14px; border-radius:4px; display:inline-block }
-.grid { display:flex; gap:8px }
-.time-col { width:56px }
-.time-cell { height:28px; font-size:11px; color:#334155; display:flex; align-items:center }
+
+.grid-wrapper { display:flex; flex-direction:column; gap:0 }
+
+.header-row { display:flex; gap:8px; margin-bottom:8px }
+.time-header { width:56px }
+.days-headers { display:flex; gap:6px; flex:1 }
+.day-header { 
+  flex:1; 
+  display:flex; 
+  justify-content:center; 
+  font-weight:600; 
+  color:#0f172a;
+  min-width:0;
+}
+
+.grid { 
+  display:flex; 
+  gap:8px;
+  overflow-x:auto;
+}
+
+.time-col { 
+  width:56px;
+  display:flex;
+  flex-direction:column;
+  gap:0;
+}
+
+.time-cell { 
+  flex:1;
+  min-height:40px;
+  font-size:11px; 
+  color:#334155; 
+  display:flex; 
+  align-items:center;
+  padding:4px 0;
+}
+
 .days-col { flex:1 }
-.day-header { display:flex; justify-content:center; font-weight:600; color:#0f172a; margin-bottom:4px }
-.day-columns { display:flex; gap:6px }
-.day-column { position:relative; flex:1; min-width:0; border-radius:6px; background: #fff; padding:6px }
-.grid-cell { height:28px; border-bottom:1px dashed #e6eef8 }
-.blocks { position:absolute; left:6px; right:6px; top:30px; bottom:6px }
-.person-block { position:absolute; left:4px; right:4px; border-radius:6px; color:#021124; padding:4px 6px; font-size:12px; box-shadow:0 6px 12px rgba(11,20,40,0.08) }
-.block-label { font-weight:600 }
+
+.day-columns { 
+  display:flex; 
+  gap:6px;
+  min-width:0;
+}
+
+.day-column { 
+  position:relative; 
+  flex:1; 
+  min-width:0;
+  border-radius:6px; 
+  background:#fff; 
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  gap:0;
+  overflow:hidden;
+}
+
+.grid-cell { 
+  flex:1;
+  min-height:40px;
+  border-bottom:1px dashed #e6eef8;
+  padding:6px;
+}
+
+.blocks { 
+  position:absolute; 
+  left:0; 
+  right:0; 
+  top:0; 
+  bottom:0;
+  padding:6px;
+}
+
+.person-block { 
+  position:absolute; 
+  left:6px; 
+  right:6px; 
+  border-radius:6px; 
+  color:#021124; 
+  padding:4px 6px; 
+  font-size:12px; 
+  box-shadow:0 6px 12px rgba(11,20,40,0.08);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.block-label { 
+  font-weight:600;
+}
 </style>
