@@ -49,7 +49,7 @@ const props = defineProps({
   rows: { type: Array, default: () => [] },
   slotStart: { type: Number, default: 8 * 60 },
   slotEnd: { type: Number, default: 18 * 60 },
-  slotStep: { type: Number, default: 30 },
+  slotStep: { type: Number, default: 10 },
 })
 
 const WEEKDAY_ORDER = ['一','二','三','四','五','六','日']

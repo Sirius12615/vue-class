@@ -15,7 +15,7 @@ const SAMPLE_CSV = `姓名,星期,開始,結束,課程,教室
 
 const SLOT_START = 8 * 60
 const SLOT_END = 18 * 60
-const SLOT_MINUTES = 30
+const SLOT_MINUTES = 10
 const WEEKDAY_ORDER = ['一', '二', '三', '四', '五', '六', '日']
 const WEEKDAY_LABELS = { 一: '週一', 二: '週二', 三: '週三', 四: '週四', 五: '週五', 六: '週六', 日: '週日' }
 
@@ -28,6 +28,7 @@ const selectedName = ref('全部')
 const uploadName = ref('')
 const selectedPeople = ref([])
 const matchRooms = ref([])
+const selectedRoom = ref(null)
 const currentPage = ref('control')
 
 function createMatchRoom() {
@@ -395,6 +396,19 @@ const selectedMatches = computed(() => {
     .slice(0, 5)
   })
 
+const demoPagePeople = computed(() => {
+  if (!selectedRoom.value) {
+    return availableNames.value
+  }
+  const room = matchRooms.value.find((r) => r.id === selectedRoom.value)
+  return room ? room.members : []
+})
+
+const demoPageRows = computed(() => {
+  const people = new Set(demoPagePeople.value)
+  return rows.value.filter((row) => people.has(row.name))
+})
+
 const pairMatches = computed(() => {
   const people = availableNames.value
   const occupationMap = buildOccupationMap(rows.value)
@@ -725,13 +739,22 @@ onMounted(loadFromBackend)
       </section>
 
       <section v-else class="card" style="padding:20px;border-radius:18px;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-          <button class="ghost-button" @click.prevent="currentPage = 'control'">← 返回控制中心</button>
-          <h2 style="margin:0;color:#e8eefc">示範課表（放大檢視）</h2>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <button class="ghost-button" @click.prevent="currentPage = 'control'">← 返回控制中心</button>
+            <h2 style="margin:0;color:#e8eefc">示範課表（放大檢視）</h2>
+          </div>
+          <div v-if="matchRooms.length" style="display:flex;gap:8px;align-items:center;">
+            <label style="color:#9eb0d1;font-size:0.9rem;">媒合空間：</label>
+            <select v-model="selectedRoom" class="text-input" style="width:200px;">
+              <option :value="null">所有學生</option>
+              <option v-for="room in matchRooms" :key="room.id" :value="room.id">{{ room.name }}</option>
+            </select>
+          </div>
         </div>
 
         <div>
-          <ScheduleGrid :people="availableNames" :rows="rows" :slotStart="5*60" :slotEnd="22*60" :slotStep="20" />
+          <ScheduleGrid :people="demoPagePeople" :rows="demoPageRows" :slotStart="5*60" :slotEnd="22*60" :slotStep="10" />
         </div>
       </section>
     </main>
@@ -871,10 +894,22 @@ onMounted(loadFromBackend)
   font-weight: 700;
 }
 
+.primary-button.active {
+  background: linear-gradient(135deg, #60a5fa, #818cf8);
+  box-shadow: 0 0 20px rgba(96, 165, 250, 0.4);
+}
+
 .secondary-button {
   background: rgba(96, 165, 250, 0.12);
   border-color: rgba(96, 165, 250, 0.24);
   color: #e7f0ff;
+}
+
+.secondary-button.active {
+  background: linear-gradient(135deg, #60a5fa, #818cf8);
+  border-color: rgba(96, 165, 250, 0.6);
+  color: #fff;
+  box-shadow: 0 0 20px rgba(96, 165, 250, 0.4);
 }
 
 .ghost-button {
