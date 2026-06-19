@@ -3,16 +3,6 @@ import { computed, onMounted, ref } from 'vue'
 import { parseStandardCSV, parseExcelWorkbook } from './scheduleParser.js'
 import ScheduleGrid from './components/ScheduleGrid.vue'
 
-const SAMPLE_CSV = `姓名,星期,開始,結束,課程,教室
-林芷晴,一,09:10,10:00,資料結構,A301
-林芷晴,三,13:10,14:00,網頁設計,B204
-王柏宇,一,10:10,11:00,作業系統,C102
-王柏宇,四,13:10,14:00,資料庫系統,D305
-陳思妤,二,09:10,10:00,演算法,A201
-陳思妤,四,10:10,11:00,專題討論,B108
-周子安,三,08:10,09:00,程式設計基礎,C210
-周子安,五,13:10,14:00,人工智慧,E101`
-
 const SLOT_START = 8 * 60
 const SLOT_END = 18 * 60
 const SLOT_MINUTES = 10
@@ -20,8 +10,8 @@ const WEEKDAY_ORDER = ['一', '二', '三', '四', '五', '六', '日']
 const WEEKDAY_LABELS = { 一: '週一', 二: '週二', 三: '週三', 四: '週四', 五: '週五', 六: '週六', 日: '週日' }
 
 const rows = ref([])
-const activeSource = ref('內建模擬課表')
-const statusText = ref('尚未連線')
+const activeSource = ref('無')
+const statusText = ref('尚未載入課表，請從上方上傳課表')
 const lastSyncText = ref('未同步')
 const searchText = ref('')
 const selectedName = ref('全部')
@@ -166,11 +156,18 @@ function sortedDays() {
 }
 
 function createSlots() {
-  const slots = []
-  for (let minute = SLOT_START; minute < SLOT_END; minute += SLOT_MINUTES) {
-    slots.push({ start: minute, end: minute + SLOT_MINUTES })
-  }
-  return slots
+  return [
+    { start: 8 * 60 + 10,  end: 9 * 60 },       // 08:10~09:00 (第一節)
+    { start: 9 * 60 + 10,  end: 10 * 60 },      // 09:10~10:00 (第二節)
+    { start: 10 * 60 + 10, end: 11 * 60 },      // 10:10~11:00 (第三節)
+    { start: 11 * 60 + 10, end: 12 * 60 },      // 11:10~12:00 (第四節)
+    { start: 12 * 60 + 10, end: 13 * 60 + 10 }, // 12:10~13:10 (第五節/中午)
+    { start: 13 * 60 + 10, end: 14 * 60 },      // 13:10~14:00 (第六節)
+    { start: 14 * 60 + 10, end: 15 * 60 },      // 14:10~15:00 (第七節)
+    { start: 15 * 60 + 10, end: 16 * 60 },      // 15:10~16:00 (第八節)
+    { start: 16 * 60 + 10, end: 17 * 60 },      // 16:10~17:00 (第九節)
+    { start: 17 * 60 + 10, end: 18 * 60 }       // 17:10~18:00 (第十節)
+  ]
 }
 
 function mergeIntervals(intervals) {
@@ -221,36 +218,36 @@ function buildFreeIntervalsForPerson(personRows, occupationMap) {
   const freeIntervals = []
   const used = new Map(occupationMap)
 
-  for (const day of WEEKDAY_ORDER) {
+  // 正常上課時間為週一至週五，排除週末
+  const targetDays = WEEKDAY_ORDER.slice(0, 5)
+
+  for (const day of targetDays) {
     const occupied = used.get(day) || new Set()
     let openStart = null
+    let openEnd = null
 
-    for (const slot of createSlots()) {
+    const daySlots = createAllDaySlots()
+
+    for (let i = 0; i < daySlots.length; i++) {
+      const slot = daySlots[i]
       const isFree = !occupied.has(slot.start)
 
-      if (isFree && openStart === null) {
-        openStart = slot.start
+      if (isFree) {
+        if (openStart === null) {
+          openStart = slot.start
+        }
+        openEnd = slot.end
       }
 
-      if ((!isFree || slot.end >= SLOT_END) && openStart !== null) {
-        const closeAt = isFree && slot.end >= SLOT_END ? slot.end : slot.start
-        freeIntervals.push({ day, start: openStart, end: closeAt })
+      if ((!isFree || i === daySlots.length - 1) && openStart !== null) {
+        freeIntervals.push({ day, start: openStart, end: openEnd })
         openStart = null
+        openEnd = null
       }
     }
   }
 
   return freeIntervals
-}
-
-function durationLabel(minutes) {
-  if (minutes < 60) {
-    return `${minutes} 分鐘`
-  }
-
-  const hours = Math.floor(minutes / 60)
-  const mins = minutes % 60
-  return mins === 0 ? `${hours} 小時` : `${hours} 小時 ${mins} 分鐘`
 }
 
 function flattenRowsByName(value) {
@@ -266,38 +263,113 @@ function flattenRowsByName(value) {
   return people
 }
 
-function overlapMinutes(left, right) {
-  const leftMap = new Map()
-  const rightMap = new Map()
-  
-  left.forEach(item => {
-    if (!leftMap.has(item.day)) leftMap.set(item.day, [])
-    leftMap.get(item.day).push(item)
-  })
-  
-  right.forEach(item => {
-    if (!rightMap.has(item.day)) rightMap.set(item.day, [])
-    rightMap.get(item.day).push(item)
-  })
+function createAllDaySlots() {
+  return [
+    ...createSlots(),
+    { start: 18 * 60 + 30, end: 19 * 60 + 20 }, // 18:30~19:20 (第十一節)
+    { start: 19 * 60 + 25, end: 20 * 60 + 15 }, // 19:25~20:15 (第十二節)
+    { start: 20 * 60 + 25, end: 21 * 60 + 15 }, // 20:25~21:15 (第十三節)
+    { start: 21 * 60 + 20, end: 22 * 60 + 10 }  // 21:20~22:10 (第十四節)
+  ]
+}
 
-  let total = 0
+function getMorningSlots() {
+  return [
+    { start: 8 * 60 + 10,  end: 9 * 60 },       // 08:10~09:00 (第一節)
+    { start: 9 * 60 + 10,  end: 10 * 60 },      // 09:10~10:00 (第二節)
+    { start: 10 * 60 + 10, end: 11 * 60 },      // 10:10~11:00 (第三節)
+    { start: 11 * 60 + 10, end: 12 * 60 }       // 11:10~12:00 (第四節)
+  ]
+}
 
-  for (const day of WEEKDAY_ORDER) {
-    const leftItems = leftMap.get(day) || []
-    const rightItems = rightMap.get(day) || []
+function getAfternoonSlots() {
+  return [
+    { start: 12 * 60 + 10, end: 13 * 60 + 10 }, // 12:10~13:10 (第五節/中午)
+    { start: 13 * 60 + 10, end: 14 * 60 },      // 13:10~14:00 (第六節)
+    { start: 14 * 60 + 10, end: 15 * 60 },      // 14:10~15:00 (第七節)
+    { start: 15 * 60 + 10, end: 16 * 60 },      // 15:10~16:00 (第八節)
+    { start: 16 * 60 + 10, end: 17 * 60 },      // 16:10~17:00 (第九節)
+    { start: 17 * 60 + 10, end: 18 * 60 }       // 17:10~18:00 (第十節)
+  ]
+}
 
-    for (const l of leftItems) {
-      for (const r of rightItems) {
-        const start = Math.max(l.start, r.start)
-        const end = Math.min(l.end, r.end)
-        if (end > start) {
-          total += end - start
+function getEveningSlots() {
+  return [
+    { start: 18 * 60 + 30, end: 19 * 60 + 20 }, // 18:30~19:20 (第十一節)
+    { start: 19 * 60 + 25, end: 20 * 60 + 15 }, // 19:25~20:15 (第十二節)
+    { start: 20 * 60 + 25, end: 21 * 60 + 15 }, // 20:25~21:15 (第十三節)
+    { start: 21 * 60 + 20, end: 22 * 60 + 10 }  // 21:20~22:10 (第十四節)
+  ]
+}
+
+function countFreePeriods(personRows, slotsList) {
+  let count = 0
+  const targetDays = WEEKDAY_ORDER.slice(0, 5) // Monday to Friday
+
+  for (const day of targetDays) {
+    const dayRows = personRows.filter(r => r.day === day)
+    for (const slot of slotsList) {
+      const isOccupied = dayRows.some(row => slot.start < row.end && slot.end > row.start)
+      if (!isOccupied) {
+        count++
+      }
+    }
+  }
+  return count
+}
+
+function countCommonFreePeriods(leftRows, rightRows, slotsList) {
+  let count = 0
+  const targetDays = WEEKDAY_ORDER.slice(0, 5) // Monday to Friday
+
+  for (const day of targetDays) {
+    const leftDayRows = leftRows.filter(r => r.day === day)
+    const rightDayRows = rightRows.filter(r => r.day === day)
+    for (const slot of slotsList) {
+      const leftOccupied = leftDayRows.some(row => slot.start < row.end && slot.end > row.start)
+      const rightOccupied = rightDayRows.some(row => slot.start < row.end && slot.end > row.start)
+      if (!leftOccupied && !rightOccupied) {
+        count++
+      }
+    }
+  }
+  return count
+}
+
+function buildCommonFreeIntervals(leftRows, rightRows) {
+  const freeIntervals = []
+  const targetDays = WEEKDAY_ORDER.slice(0, 5)
+
+  for (const day of targetDays) {
+    const leftDayRows = leftRows.filter(r => r.day === day)
+    const rightDayRows = rightRows.filter(r => r.day === day)
+    let openStart = null
+    let openEnd = null
+
+    const daySlots = createAllDaySlots()
+
+    for (let i = 0; i < daySlots.length; i++) {
+      const slot = daySlots[i]
+      const leftOccupied = leftDayRows.some(row => slot.start < row.end && slot.end > row.start)
+      const rightOccupied = rightDayRows.some(row => slot.start < row.end && slot.end > row.start)
+      const isCommonFree = !leftOccupied && !rightOccupied
+
+      if (isCommonFree) {
+        if (openStart === null) {
+          openStart = slot.start
         }
+        openEnd = slot.end
+      }
+
+      if ((!isCommonFree || i === daySlots.length - 1) && openStart !== null) {
+        freeIntervals.push({ day, start: openStart, end: openEnd })
+        openStart = null
+        openEnd = null
       }
     }
   }
 
-  return total
+  return freeIntervals
 }
 
 function intervalText(interval) {
@@ -306,17 +378,19 @@ function intervalText(interval) {
 
 function summarizePerson(name, occupationMap, peopleMap) {
   const personalRows = peopleMap.get(name) || []
+  
+  const freePeriodsMorning = countFreePeriods(personalRows, getMorningSlots())
+  const freePeriodsAfternoon = countFreePeriods(personalRows, getAfternoonSlots())
+  const freePeriodsEvening = countFreePeriods(personalRows, getEveningSlots())
+  
   const personalOccupation = new Map()
-
   for (const day of WEEKDAY_ORDER) {
     personalOccupation.set(day, new Set())
   }
-
   for (const row of personalRows) {
     const slots = personalOccupation.get(row.day)
     if (!slots) continue
-
-    for (const slot of createSlots()) {
+    for (const slot of createAllDaySlots()) {
       if (slot.start < row.end && slot.end > row.start) {
         slots.add(slot.start)
       }
@@ -324,12 +398,14 @@ function summarizePerson(name, occupationMap, peopleMap) {
   }
 
   const freeIntervals = buildFreeIntervalsForPerson(personalRows, personalOccupation)
-  const availableMinutes = freeIntervals.reduce((total, interval) => total + interval.end - interval.start, 0)
+
   return {
     name,
     classCount: personalRows.length,
     freeIntervals,
-    availableMinutes,
+    freePeriodsMorning,
+    freePeriodsAfternoon,
+    freePeriodsEvening
   }
 }
 
@@ -397,25 +473,25 @@ const selectedMatches = computed(() => {
   }
 
   const target = selectedName.value === '全部' ? people[0] : selectedName.value
-  const targetSummary = summarizePerson(target, null, peopleMap.value)
+  const targetRows = peopleMap.value.get(target) || []
 
   return people
     .filter((name) => name !== target)
     .map((name) => {
-      const summary = summarizePerson(name, null, peopleMap.value)
-      const score = overlapMinutes(targetSummary.freeIntervals, summary.freeIntervals)
-      const common = targetSummary.freeIntervals.filter((left) => summary.freeIntervals.some((right) => left.day === right.day && Math.min(left.end, right.end) > Math.max(left.start, right.start)))
+      const otherRows = peopleMap.value.get(name) || []
+      const score = countCommonFreePeriods(targetRows, otherRows, createAllDaySlots())
+      const common = buildCommonFreeIntervals(targetRows, otherRows)
 
       return {
         name,
         score,
         common,
-        classCount: summary.classCount,
+        classCount: otherRows.length,
       }
     })
     .sort((left, right) => right.score - left.score)
     .slice(0, 5)
-  })
+})
 
 const demoPagePeople = computed(() => {
   if (!selectedRoom.value) {
@@ -433,21 +509,20 @@ const demoPageRows = computed(() => {
 const pairMatches = computed(() => {
   const people = availableNames.value
 
-  const summaries = new Map(
-    people.map((name) => [name, summarizePerson(name, null, peopleMap.value)]),
-  )
-
   const pairs = []
   for (let i = 0; i < people.length; i += 1) {
     for (let j = i + 1; j < people.length; j += 1) {
-      const left = summaries.get(people[i])
-      const right = summaries.get(people[j])
-      const score = overlapMinutes(left.freeIntervals, right.freeIntervals)
-      const common = left.freeIntervals.filter((item) => right.freeIntervals.some((other) => item.day === other.day && Math.min(item.end, other.end) > Math.max(item.start, other.start)))
+      const leftName = people[i]
+      const rightName = people[j]
+      const leftRows = peopleMap.value.get(leftName) || []
+      const rightRows = peopleMap.value.get(rightName) || []
+      
+      const score = countCommonFreePeriods(leftRows, rightRows, createAllDaySlots())
+      const common = buildCommonFreeIntervals(leftRows, rightRows)
 
       pairs.push({
-        left: people[i],
-        right: people[j],
+        left: leftName,
+        right: rightName,
         score,
         common,
       })
@@ -468,15 +543,8 @@ async function loadFromBackend() {
     refreshRows(Array.isArray(payload.rows) ? payload.rows : [], '後端資料庫')
     statusText.value = '後端連線成功'
   } catch {
-    if (!rows.value.length) {
-      loadSample()
-    }
-    statusText.value = '後端未啟動，已使用前端示範資料'
+    statusText.value = '尚未載入課表，請從上方上傳課表'
   }
-}
-
-function loadSample() {
-  refreshRows(parseCSV(SAMPLE_CSV), '內建模擬課表')
 }
 
 async function handleFileChange(event) {
@@ -509,10 +577,7 @@ async function handleFileChange(event) {
     return
   }
 
-  // If currently using built-in sample, remove it when user uploads their CSV
-  if (activeSource.value === '內建模擬課表' && rows.value.length) {
-    rows.value = []
-  }
+
 
   // Determine name conflicts between incoming rows and existing rows
   const existingNames = new Set(rows.value.map((r) => r.name))
@@ -528,9 +593,9 @@ async function handleFileChange(event) {
     for (const conflictName of conflicts) {
       const input = window.prompt(
         `發現系統中已存在名為「${conflictName}」的學生。\n\n` +
-        `1. 若此檔案是【同名同姓】的另一位同學：請輸入新別名（例如：${conflictName} (2) 或 ${conflictName}-乙班 等）。\n` +
-        `2. 若您想【直接覆蓋】舊課表：請清空此對話框，點選確定即可。\n` +
-        `3. 若您想【取消匯入】此人：請點選取消。`,
+        `1. 若此檔案是其他同學：請輸入新別名（例如：${conflictName} (2) 或 ${conflictName}-乙班 等）。\n` +
+        `2. 若您想覆蓋舊課表：請清空此對話框，點選確定即可。\n` +
+        `3. 若您想取消此次動作：請點選取消。`,
         `${conflictName} (2)`
       )
 
@@ -606,10 +671,7 @@ async function syncToBackend() {
   }
 }
 
-function useSample() {
-  loadSample()
-  statusText.value = '已切換為示範資料'
-}
+
 
 function deletePerson(name) {
   if (name === '全部' || !name) return
@@ -654,7 +716,6 @@ onMounted(loadFromBackend)
               <input type="file" accept=".xlsx,.xls,.csv,text/csv" @change="handleFileChange">
             </label>
             <button class="secondary-button" type="button" @click="syncToBackend">同步到後端資料庫</button>
-            <button class="ghost-button" type="button" @click="useSample">載入示範資料</button>
           </div>
 
           <div class="status-row">
@@ -777,7 +838,9 @@ onMounted(loadFromBackend)
               </div>
             </div>
 
-            <p class="summary-line">可用空堂：約 {{ durationLabel(selectedSummary.availableMinutes) }}</p>
+            <p class="summary-line">
+              可用空堂：上午 <strong>{{ selectedSummary.freePeriodsMorning }}</strong> 節 / 下午 <strong>{{ selectedSummary.freePeriodsAfternoon }}</strong> 節 / 晚上 <strong>{{ selectedSummary.freePeriodsEvening }}</strong> 節
+            </p>
 
             <div class="chip-list">
               <span v-for="interval in selectedSummary.freeIntervals.slice(0, 8)" :key="`${interval.day}-${interval.start}`" class="chip">
@@ -792,8 +855,8 @@ onMounted(loadFromBackend)
                   <strong>{{ match.name }}</strong>
                   <p>{{ match.classCount }} 堂課</p>
                 </div>
-                <div class="match-score">
-                  <span>{{ durationLabel(match.score) }}</span>
+                 <div class="match-score">
+                  <span>{{ match.score }} 節</span>
                   <small>共同空堂</small>
                 </div>
               </div>
@@ -816,7 +879,7 @@ onMounted(loadFromBackend)
                   <p>{{ pair.common.length }} 個共同空堂區段</p>
                 </div>
                 <div class="match-score">
-                  <span>{{ durationLabel(pair.score) }}</span>
+                  <span>{{ pair.score }} 節</span>
                   <small>可共同安排</small>
                 </div>
               </div>

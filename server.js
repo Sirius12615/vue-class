@@ -11,15 +11,7 @@ const dataDir = path.join(__dirname, 'data')
 const dataFile = path.join(dataDir, 'timetables.csv')
 const distDir = path.join(__dirname, 'dist')
 
-const SEED_CSV = `姓名,星期,開始,結束,課程,教室
-林芷晴,一,09:00,11:00,資料結構,A301
-林芷晴,三,13:30,15:00,網頁設計,B204
-王柏宇,一,10:00,12:00,作業系統,C102
-王柏宇,四,13:00,15:30,資料庫系統,D305
-陳思妤,二,09:30,12:00,演算法,A201
-陳思妤,四,10:00,12:00,專題討論,B108
-周子安,三,08:30,10:30,程式設計基礎,C210
-周子安,五,13:00,16:00,人工智慧,E101`
+const SEED_CSV = `姓名,星期,開始,結束,課程,教室`
 
 function splitCSVLine(line) {
   const result = []
