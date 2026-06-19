@@ -68,8 +68,7 @@ function splitCSVLine(line) {
 }
 
 function parseCSV(text) {
-  // 修正點：parseImportedRows 出來的結果已經是經過標準規格規格化後的物件，不需再調用本地的 normalizeRow 造成二次偏誤
-  return parseImportedRows(text)
+  return parseStandardCSV(text)
 }
 
 function normalizeDay(value) {
@@ -87,6 +86,9 @@ function normalizeDay(value) {
 }
 
 function normalizeTime(value) {
+  if (typeof value === 'number') {
+    return value
+  }
   const raw = String(value ?? '').trim()
   if (!raw) return null
 
@@ -99,7 +101,9 @@ function normalizeTime(value) {
     const padded = raw.padStart(4, '0')
     const hours = Number(padded.slice(0, 2))
     const minutes = Number(padded.slice(2))
-    return hours * 60 + minutes
+    if (minutes < 60) {
+      return hours * 60 + minutes
+    }
   }
 
   const numeric = Number(raw)
@@ -136,20 +140,7 @@ function normalizeRow(record) {
   }
 }
 
-function rowsToCSV(value) {
-  const escapeCell = (cell) => {
-    const text = String(cell ?? '')
-    if (/[",\n]/.test(text)) {
-      return `"${text.replaceAll('"', '""')}"`
-    }
-    return text
-  }
 
-  return [
-    '姓名,星期,開始,結束,課程,教室',
-    ...value.map((row) => [row.name, row.day, minutesToLabel(row.start), minutesToLabel(row.end), row.course, row.room].map(escapeCell).join(',')),
-  ].join('\n')
-}
 
 function sortedDays() {
   return [...WEEKDAY_ORDER]
@@ -648,15 +639,13 @@ async function handleFileChange(event) {
 }
 
 async function syncToBackend() {
-  const payload = rowsToCSV(rows.value)
-
   try {
     const response = await fetch('/api/schedules', {
       method: 'POST',
       headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
+        'Content-Type': 'application/json',
       },
-      body: payload,
+      body: JSON.stringify({ rows: rows.value }),
     })
 
     if (!response.ok) {

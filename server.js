@@ -1,72 +1,60 @@
 import http from 'node:http'
 import { createReadStream } from 'node:fs'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { mkdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { parseImportedRows } from './src/scheduleParser.js'
+import sqlite3 from 'sqlite3'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.PORT || 3001)
 const dataDir = path.join(__dirname, 'data')
-const dataFile = path.join(dataDir, 'timetables.csv')
+const dbFile = path.join(dataDir, 'timetables.db')
 const distDir = path.join(__dirname, 'dist')
 
-const SEED_CSV = `姓名,星期,開始,結束,課程,教室`
-
-function splitCSVLine(line) {
-  const result = []
-  let current = ''
-  let inQuotes = false
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index]
-    const next = line[index + 1]
-
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        current += '"'
-        index += 1
-      } else {
-        inQuotes = !inQuotes
-      }
-      continue
-    }
-
-    if (char === ',' && !inQuotes) {
-      result.push(current.trim())
-      current = ''
-      continue
-    }
-
-    current += char
-  }
-
-  result.push(current.trim())
-  return result
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const db = new sqlite3.Database(dbFile, (err) => {
+      if (err) reject(err)
+      else resolve(db)
+    })
+  })
 }
 
-function normalizeDay(value) {
-  return String(value ?? '').trim().replace(/^週/, '').replace(/^星期/, '')
+function runQuery(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) reject(err)
+      else resolve(this)
+    })
+  })
 }
 
-function normalizeTime(value) {
-  const raw = String(value ?? '').trim()
-  if (/^\d{1,2}:\d{2}$/.test(raw)) {
-    return raw
-  }
-  return raw
-}
-
-function parseCSV(text) {
-  return parseImportedRows(text)
+function allQuery(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      if (err) reject(err)
+      else resolve(rows)
+    })
+  })
 }
 
 async function ensureSeedData() {
   await mkdir(dataDir, { recursive: true })
+  const db = await openDB()
   try {
-    await stat(dataFile)
-  } catch {
-    await writeFile(dataFile, SEED_CSV, 'utf8')
+    await runQuery(db, `
+      CREATE TABLE IF NOT EXISTS schedules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        day TEXT,
+        start INTEGER,
+        end INTEGER,
+        course TEXT,
+        room TEXT
+      )
+    `)
+  } finally {
+    db.close()
   }
 }
 
@@ -165,26 +153,70 @@ const server = http.createServer(async (request, response) => {
   }
 
   if (url.pathname === '/api/schedules' && request.method === 'GET') {
-    const csv = await readFile(dataFile, 'utf8')
-    sendJSON(response, 200, { rows: parseCSV(csv) })
+    let db;
+    try {
+      db = await openDB()
+      const dbRows = await allQuery(db, 'SELECT name, day, start, end, course, room FROM schedules')
+      sendJSON(response, 200, { rows: dbRows })
+    } catch (error) {
+      sendJSON(response, 200, { rows: [] })
+    } finally {
+      if (db) db.close()
+    }
     return
   }
 
   if (url.pathname === '/api/schedules' && request.method === 'POST') {
-    const body = await readBody(request)
-    let csv = body
-
+    let db;
     try {
-      const parsed = JSON.parse(body)
-      if (parsed && typeof parsed.csv === 'string') {
-        csv = parsed.csv
-      }
-    } catch {
-      // Use raw CSV body.
-    }
+      const body = await readBody(request)
+      const payload = JSON.parse(body)
+      const rows = payload.rows || []
 
-    await writeFile(dataFile, csv, 'utf8')
-    sendJSON(response, 200, { ok: true, count: parseCSV(csv).length })
+      db = await openDB()
+      await runQuery(db, 'BEGIN TRANSACTION')
+      await runQuery(db, 'DELETE FROM schedules')
+
+      const insertStmt = db.prepare(`
+        INSERT INTO schedules (name, day, start, end, course, room)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+
+      for (const row of rows) {
+        await new Promise((resolve, reject) => {
+          insertStmt.run([
+            row.name || '',
+            row.day || '',
+            row.start || 0,
+            row.end || 0,
+            row.course || '',
+            row.room || ''
+          ], (err) => {
+            if (err) reject(err)
+            else resolve()
+          })
+        })
+      }
+
+      await new Promise((resolve, reject) => {
+        insertStmt.finalize((err) => {
+          if (err) reject(err)
+          else resolve()
+        })
+      })
+
+      await runQuery(db, 'COMMIT')
+      sendJSON(response, 200, { ok: true, count: rows.length })
+    } catch (error) {
+      if (db) {
+        try {
+          await runQuery(db, 'ROLLBACK')
+        } catch {}
+      }
+      sendJSON(response, 500, { error: error.message })
+    } finally {
+      if (db) db.close()
+    }
     return
   }
 
