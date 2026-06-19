@@ -4,14 +4,14 @@ import { parseImportedRows } from './scheduleParser.js'
 import ScheduleGrid from './components/ScheduleGrid.vue'
 
 const SAMPLE_CSV = `姓名,星期,開始,結束,課程,教室
-林芷晴,一,09:00,11:00,資料結構,A301
-林芷晴,三,13:30,15:00,網頁設計,B204
-王柏宇,一,10:00,12:00,作業系統,C102
-王柏宇,四,13:00,15:30,資料庫系統,D305
-陳思妤,二,09:30,12:00,演算法,A201
-陳思妤,四,10:00,12:00,專題討論,B108
-周子安,三,08:30,10:30,程式設計基礎,C210
-周子安,五,13:00,16:00,人工智慧,E101`
+林芷晴,一,09:10,10:00,資料結構,A301
+林芷晴,三,13:10,14:00,網頁設計,B204
+王柏宇,一,10:10,11:00,作業系統,C102
+王柏宇,四,13:10,14:00,資料庫系統,D305
+陳思妤,二,09:10,10:00,演算法,A201
+陳思妤,四,10:10,11:00,專題討論,B108
+周子安,三,08:10,09:00,程式設計基礎,C210
+周子安,五,13:10,14:00,人工智慧,E101`
 
 const SLOT_START = 8 * 60
 const SLOT_END = 18 * 60
@@ -20,7 +20,7 @@ const WEEKDAY_ORDER = ['一', '二', '三', '四', '五', '六', '日']
 const WEEKDAY_LABELS = { 一: '週一', 二: '週二', 三: '週三', 四: '週四', 五: '週五', 六: '週六', 日: '週日' }
 
 const rows = ref([])
-const activeSource = ref('內建示範課表')
+const activeSource = ref('內建模擬課表')
 const statusText = ref('尚未連線')
 const lastSyncText = ref('未同步')
 const searchText = ref('')
@@ -125,7 +125,7 @@ function normalizeRow(record) {
   const start = normalizeTime(record.開始 ?? record.start ?? '')
   const end = normalizeTime(record.結束 ?? record.end ?? '')
 
-  if (!name || !day || start === null || end === null || end <= start) {
+  if (!name || !day || start === null || end === null || end <= start || (end - start) <= 10) {
     return null
   }
 
@@ -280,7 +280,7 @@ function overlapMinutes(left, right) {
 }
 
 function intervalText(interval) {
-  return `${WEEKDAY_LABELS[interval.day] || interval.day} ${minutesToLabel(interval.start)}-${minutesToLabel(interval.end)}`
+  return `${WEEKDAY_LABELS[interval.day] || interval.day} ${minutesToLabel(interval.start)} 到 ${minutesToLabel(interval.end)}`
 }
 
 function summarizePerson(name, occupationMap, peopleMap) {
@@ -456,7 +456,7 @@ async function loadFromBackend() {
 }
 
 function loadSample() {
-  refreshRows(parseCSV(SAMPLE_CSV), '內建示範課表')
+  refreshRows(parseCSV(SAMPLE_CSV), '內建模擬課表')
 }
 
 async function handleFileChange(event) {
@@ -473,7 +473,7 @@ async function handleFileChange(event) {
   }
 
   // If currently using built-in sample, remove it when user uploads their CSV
-  if (activeSource.value === '內建示範課表' && rows.value.length) {
+  if (activeSource.value === '內建模擬課表' && rows.value.length) {
     rows.value = []
   }
 
@@ -540,6 +540,20 @@ function useSample() {
   statusText.value = '已切換為示範資料'
 }
 
+function deletePerson(name) {
+  if (name === '全部' || !name) return
+  if (!window.confirm(`確定要刪除「${name}」的所有課表資料嗎？此操作無法復原。`)) return
+
+  rows.value = rows.value.filter((r) => r.name !== name)
+
+  if (selectedName.value === name) {
+    selectedName.value = '全部'
+  }
+  selectedPeople.value = selectedPeople.value.filter((n) => n !== name)
+
+  statusText.value = `已刪除學生：${name}`
+}
+
 onMounted(loadFromBackend)
 </script>
 
@@ -550,9 +564,9 @@ onMounted(loadFromBackend)
 
     <main class="layout">
       <nav style="display:flex;gap:12px;align-items:center;margin-bottom:16px;">
-        <button @click.prevent="currentPage = 'control'" :class="['primary-button', currentPage === 'control' ? 'active' : '']">控制中心</button>
-        <button @click.prevent="currentPage = 'demo'" :class="['secondary-button', currentPage === 'demo' ? 'active' : '']">示範課表</button>
-        <div style="margin-left:auto;color:#b6c2db">目前頁面：{{ currentPage === 'control' ? '控制中心' : '示範課表' }}</div>
+        <button @click.prevent="currentPage = 'control'" :class="currentPage === 'control' ? 'primary-button active' : 'ghost-button'">控制中心</button>
+        <button @click.prevent="currentPage = 'demo'" :class="currentPage === 'demo' ? 'primary-button active' : 'ghost-button'">模擬課表</button>
+        <div style="margin-left:auto;color:#b6c2db">目前頁面：{{ currentPage === 'control' ? '控制中心' : '模擬課表' }}</div>
       </nav>
 
       <section v-if="currentPage === 'control'" class="hero card">
@@ -592,10 +606,18 @@ onMounted(loadFromBackend)
             </div>
             <div>
               <label>媒合對象</label>
-              <select v-model="selectedName" class="text-input">
-                <option value="全部">全部</option>
-                <option v-for="name in availableNames" :key="name" :value="name">{{ name }}</option>
-              </select>
+              <div style="display:flex;gap:8px;">
+                <select v-model="selectedName" class="text-input">
+                  <option value="全部">全部</option>
+                  <option v-for="name in availableNames" :key="name" :value="name">{{ name }}</option>
+                </select>
+                <button v-if="selectedName !== '全部'" 
+                        class="secondary-button" 
+                        style="border-color:rgba(239,68,68,0.4);color:#f87171;min-height:42px;padding:0 12px;background:rgba(239,68,68,0.1)"
+                        @click="deletePerson(selectedName)">
+                  刪除
+                </button>
+              </div>
             </div>
           </div>
 
@@ -654,7 +676,7 @@ onMounted(loadFromBackend)
                 <tr v-for="row in filteredRows" :key="`${row.name}-${row.day}-${row.start}-${row.course}`">
                   <td>{{ row.name }}</td>
                   <td>{{ WEEKDAY_LABELS[row.day] || row.day }}</td>
-                  <td>{{ minutesToLabel(row.start) }} - {{ minutesToLabel(row.end) }}</td>
+                  <td>{{ minutesToLabel(row.start) }} 到 {{ minutesToLabel(row.end) }}</td>
                   <td>{{ row.course || '—' }}</td>
                   <td>{{ row.room || '—' }}</td>
                 </tr>
@@ -672,17 +694,16 @@ onMounted(loadFromBackend)
             <div class="section-heading compact">
               <div>
                 <span class="eyebrow">個人空堂</span>
-            <aside class="side-column">
-              <article class="card note-card">
-                <span class="eyebrow">媒合空間</span>
-                <p>已建立的媒合空間清單：</p>
-                <ul>
-                  <li v-for="room in matchRooms" :key="room.id">{{ room.name }} — 成員：{{ room.members.join(', ') }}</li>
-                </ul>
-              </article>
-            </aside>
+                <h2>{{ selectedName }}</h2>
               </div>
-              <span class="subtle">{{ selectedSummary.classCount }} 堂課</span>
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                <span class="subtle">{{ selectedSummary.classCount }} 堂課</span>
+                <button class="ghost-button" 
+                        style="color:#f87171;border-color:rgba(239,68,68,0.2);font-size:0.8rem;padding:2px 8px;min-height:auto;"
+                        @click="deletePerson(selectedName)">
+                  刪除此人
+                </button>
+              </div>
             </div>
 
             <p class="summary-line">可用空堂：約 {{ durationLabel(selectedSummary.availableMinutes) }}</p>
@@ -742,7 +763,7 @@ onMounted(loadFromBackend)
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
           <div style="display:flex;align-items:center;gap:12px;">
             <button class="ghost-button" @click.prevent="currentPage = 'control'">← 返回控制中心</button>
-            <h2 style="margin:0;color:#e8eefc">示範課表（放大檢視）</h2>
+            <h2 style="margin:0;color:#e8eefc">模擬課表（放大檢視）</h2>
           </div>
           <div v-if="matchRooms.length" style="display:flex;gap:8px;align-items:center;">
             <label style="color:#9eb0d1;font-size:0.9rem;">媒合空間：</label>
@@ -1174,3 +1195,4 @@ td {
   }
 }
 </style>
+

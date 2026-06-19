@@ -94,7 +94,7 @@ function normalizeRow(record, defaultName = '課表學生') {
   const start = normalizeTime(record.開始 ?? record.start ?? '')
   const end = normalizeTime(record.結束 ?? record.end ?? '')
 
-  if (!day || start === null || end === null || end <= start) {
+  if (!day || start === null || end === null || end <= start || (end - start) <= 10) {
     return null
   }
 

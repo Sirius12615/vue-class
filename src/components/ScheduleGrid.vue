@@ -17,7 +17,7 @@
 
       <div class="grid">
         <div class="time-col">
-          <div v-for="slot in slots" :key="slot.start" class="time-cell">{{ minutesToLabel(slot.start) }}</div>
+          <div v-for="slot in slots" :key="slot.start" class="time-cell">{{ slot.label }}</div>
         </div>
 
         <div class="days-col">
@@ -28,9 +28,9 @@
               <div class="blocks">
                 <div v-for="block in blocksForDay(day)" :key="`${block.name}-${block.start}`"
                   class="person-block"
-                  :title="`${block.name} ${minutesToLabel(block.start)}-${minutesToLabel(block.end)}\n${block.course || ''}`"
+                  :title="`${block.name} ${minutesToLabel(block.start)} 到 ${minutesToLabel(block.end)}\n${block.course || ''}`"
                   :style="blockStyle(block)">
-                  <div class="block-label">{{ block.name }} {{ minutesToLabel(block.start) }}-{{ minutesToLabel(block.end) }}</div>
+                  <div class="block-label">{{ block.name }} {{ minutesToLabel(block.start) }} 到 {{ minutesToLabel(block.end) }}</div>
                 </div>
               </div>
             </div>
@@ -69,9 +69,35 @@ function nameColor(name) {
 
 const slots = computed(() => {
   const out = []
-  for (let m = props.slotStart; m < props.slotEnd; m += props.slotStep) out.push({ start: m })
+  const startHour = Math.floor(props.slotStart / 60)
+  const endHour = Math.ceil(props.slotEnd / 60)
+
+  for (let h = startHour; h < endHour; h++) {
+    const s = h * 60 + 10
+    const e = (h + 1) * 60
+    if (s >= props.slotEnd) break
+    out.push({
+      start: s,
+      end: e,
+      label: `${String(h).padStart(2, '0')}:10 到 ${String(h + 1).padStart(2, '0')}:00`
+    })
+  }
   return out
 })
+
+function timeToY(minutes) {
+  const sList = slots.value
+  if (!sList.length) return 0
+
+  for (let i = 0; i < sList.length; i++) {
+    const s = sList[i]
+    if (minutes < s.start) return i
+    if (minutes <= s.end) {
+      return i + (minutes - s.start) / (s.end - s.start)
+    }
+  }
+  return sList.length
+}
 
 const days = computed(() => WEEKDAY_ORDER.slice(0,5))
 
@@ -101,9 +127,12 @@ function blocksForDay(day){
 }
 
 function blockStyle(block){
-  const total = props.slotEnd - props.slotStart
-  const top = ((block.start - props.slotStart) / total) * 100
-  const height = ((block.end - block.start) / total) * 100
+  const startY = timeToY(block.start)
+  const endY = timeToY(block.end)
+  const total = slots.value.length
+
+  const top = (startY / total) * 100
+  const height = ((endY - startY) / total) * 100
   return {
     top: `${top}%`,
     height: `${height}%`,
@@ -121,7 +150,7 @@ function blockStyle(block){
 .grid-wrapper { display:flex; flex-direction:column; gap:0 }
 
 .header-row { display:flex; gap:8px; margin-bottom:8px }
-.time-header { width:56px }
+.time-header { width:100px }
 .days-headers { display:flex; gap:6px; flex:1 }
 .day-header { 
   flex:1; 
@@ -139,7 +168,7 @@ function blockStyle(block){
 }
 
 .time-col { 
-  width:56px;
+  width:100px;
   display:flex;
   flex-direction:column;
   gap:0;
