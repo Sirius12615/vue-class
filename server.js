@@ -100,6 +100,13 @@ async function serveStatic(request, response) {
   const url = new URL(request.url, `http://${request.headers.host}`)
   let pathname = decodeURIComponent(url.pathname)
 
+  // 移除非必要的 /vue-class 前綴，以支援部署與本地運行相容性
+  if (pathname.startsWith('/vue-class/')) {
+    pathname = pathname.substring(10) // 移除 '/vue-class' (長度為 10)
+  } else if (pathname === '/vue-class') {
+    pathname = '/'
+  }
+
   if (pathname === '/') {
     pathname = '/index.html'
   }

@@ -10,6 +10,19 @@ export default defineConfig({
   plugins: [
     vue(),
     vueDevTools(),
+    {
+      name: 'redirect-to-base',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url === '/' || req.url === '/index.html') {
+            res.writeHead(302, { Location: '/vue-class/' })
+            res.end()
+          } else {
+            next()
+          }
+        })
+      }
+    }
   ],
   server: {
     proxy: {
